@@ -9,9 +9,14 @@ const http_1 = __importDefault(require("http"));
 const server = http_1.default.createServer(app);
 const socket_io_1 = require("socket.io");
 const UserManager_1 = require("./managers/UserManager");
+// Environment variables
+const PORT = process.env.PORT || 3000;
+const FRONTEND_URL = process.env.FRONTEND_URL || '*';
 const io = new socket_io_1.Server(server, {
     cors: {
-        origin: "*"
+        origin: FRONTEND_URL,
+        methods: ["GET", "POST"],
+        credentials: true
     }
 });
 const userManager = new UserManager_1.UserManager();
@@ -23,18 +28,10 @@ io.on('connection', (socket) => {
         userManager.removeUser(socket.id);
     });
 });
-server.listen(3000, () => {
-    console.log('listening on :3000');
+// Health check endpoint
+app.get('/health', (req, res) => {
+    res.status(200).json({ status: 'ok' });
 });
-const url = `https://omegle-clone-68e8.onrender.com/`;
-const interval = 300000;
-function reloadWebsite() {
-    fetch(url, { method: 'GET' })
-        .then(response => {
-        console.log(`Reloaded at ${new Date().toISOString()}: Status Code ${response.status}`);
-    })
-        .catch(error => {
-        console.error(`Error reloading at ${new Date().toISOString()}:`, error.message);
-    });
-}
-setInterval(reloadWebsite, interval);
+server.listen(PORT, () => {
+    console.log(`Server listening on port ${PORT}`);
+});
