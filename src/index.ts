@@ -1,33 +1,41 @@
-import express from 'express';
-import { createServer } from 'http';
-import { Server, Socket } from 'socket.io';
-import { UserManager } from './managers/UserManger';
+import { WebSocket, WebSocketServer } from 'ws';
 
-const app = express();
-const httpServer = createServer(app);
-const io = new Server(httpServer, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST']
-  }
-});
+const wss = new WebSocketServer({ port: 8080 });
 
-const userManager = new UserManager();
+let senderSocket: null | WebSocket = null;
+let receiverSocket: null | WebSocket = null;
 
-app.get('/', (req, res) => {
-  res.send('OpenMeet Backend Server is running!');
-});
+wss.on('connection', function connection(ws) {
+  ws.on('error', console.error);
 
-io.on('connection', (socket: Socket) => {
-  console.log('a user connected');
-  userManager.addUser('randomName', socket);
-  socket.on('disconnect', () => {
-    console.log('user disconnected');
-    userManager.removeUser(socket.id);
+  ws.on('message', function message(data: any) {
+    const message = JSON.parse(data);
+    if (message.type === 'sender') {
+      console.log("sender added");
+      senderSocket = ws;
+    } else if (message.type === 'receiver') {
+      console.log("receiver added");
+      receiverSocket = ws;
+    } else if (message.type === 'createOffer') {
+      if (ws !== senderSocket) {
+        return;
+      }
+      console.log("sending offer");
+      receiverSocket?.send(JSON.stringify({ type: 'createOffer', sdp: message.sdp }));
+    } else if (message.type === 'createAnswer') {
+      if (ws !== receiverSocket) {
+        return;
+      }
+      console.log("sending answer");
+      senderSocket?.send(JSON.stringify({ type: 'createAnswer', sdp: message.sdp }));
+    } else if (message.type === 'iceCandidate') {
+      console.log("sending ice candidate")
+      if (ws === senderSocket) {
+        receiverSocket?.send(JSON.stringify({ type: 'iceCandidate', candidate: message.candidate }));
+      } else if (ws === receiverSocket) {
+        senderSocket?.send(JSON.stringify({ type: 'iceCandidate', candidate: message.candidate }));
+      }
+    }
   });
-});
 
-const PORT = process.env.PORT || 3000;
-httpServer.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
 });
