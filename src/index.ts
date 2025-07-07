@@ -1,41 +1,88 @@
-import { WebSocket, WebSocketServer } from 'ws';
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
 
-const wss = new WebSocketServer({ port: 8080 });
+const app = express();
+const server = createServer(app);
 
-let senderSocket: null | WebSocket = null;
-let receiverSocket: null | WebSocket = null;
+// Use CORS for cross-origin requests
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || "*",
+  methods: ["GET", "POST"]
+}));
 
-wss.on('connection', function connection(ws) {
-  ws.on('error', console.error);
+// Health check endpoint for Render
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'OpenMeet Backend Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
 
-  ws.on('message', function message(data: any) {
-    const message = JSON.parse(data);
-    if (message.type === 'sender') {
-      console.log("sender added");
-      senderSocket = ws;
-    } else if (message.type === 'receiver') {
-      console.log("receiver added");
-      receiverSocket = ws;
-    } else if (message.type === 'createOffer') {
-      if (ws !== senderSocket) {
-        return;
-      }
-      console.log("sending offer");
-      receiverSocket?.send(JSON.stringify({ type: 'createOffer', sdp: message.sdp }));
-    } else if (message.type === 'createAnswer') {
-      if (ws !== receiverSocket) {
-        return;
-      }
-      console.log("sending answer");
-      senderSocket?.send(JSON.stringify({ type: 'createAnswer', sdp: message.sdp }));
-    } else if (message.type === 'iceCandidate') {
-      console.log("sending ice candidate")
-      if (ws === senderSocket) {
-        receiverSocket?.send(JSON.stringify({ type: 'iceCandidate', candidate: message.candidate }));
-      } else if (ws === receiverSocket) {
-        senderSocket?.send(JSON.stringify({ type: 'iceCandidate', candidate: message.candidate }));
-      }
+// Initialize Socket.IO
+const io = new Server(server, {
+  cors: {
+    origin: process.env.CORS_ORIGIN || "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+let senderSocket: any = null;
+let receiverSocket: any = null;
+
+io.on('connection', (socket) => {
+  console.log('User connected:', socket.id);
+
+  socket.on('sender', () => {
+    console.log("sender added");
+    senderSocket = socket;
+  });
+
+  socket.on('receiver', () => {
+    console.log("receiver added");
+    receiverSocket = socket;
+  });
+
+  socket.on('createOffer', (data) => {
+    if (socket !== senderSocket) {
+      return;
+    }
+    console.log("sending offer");
+    receiverSocket?.emit('createOffer', { sdp: data.sdp });
+  });
+
+  socket.on('createAnswer', (data) => {
+    if (socket !== receiverSocket) {
+      return;
+    }
+    console.log("sending answer");
+    senderSocket?.emit('createAnswer', { sdp: data.sdp });
+  });
+
+  socket.on('iceCandidate', (data) => {
+    console.log("sending ice candidate");
+    if (socket === senderSocket) {
+      receiverSocket?.emit('iceCandidate', { candidate: data.candidate });
+    } else if (socket === receiverSocket) {
+      senderSocket?.emit('iceCandidate', { candidate: data.candidate });
     }
   });
 
+  socket.on('disconnect', () => {
+    console.log('User disconnected:', socket.id);
+    if (socket === senderSocket) {
+      senderSocket = null;
+    } else if (socket === receiverSocket) {
+      receiverSocket = null;
+    }
+  });
+});
+
+const PORT = process.env.PORT || 3000;
+
+server.listen(PORT, () => {
+  console.log(`🚀 OpenMeet Backend Server running on port ${PORT}`);
+  console.log(`📡 Socket.IO server ready for connections`);
 });
