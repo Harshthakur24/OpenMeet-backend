@@ -8,7 +8,7 @@ const server = createServer(app);
 
 // Use CORS for cross-origin requests
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || "*",
+  origin: "*",
   methods: ["GET", "POST"]
 }));
 
@@ -24,7 +24,7 @@ app.get('/', (req, res) => {
 // Initialize Socket.IO
 const io = new Server(server, {
   cors: {
-    origin: process.env.CORS_ORIGIN || "*",
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });
